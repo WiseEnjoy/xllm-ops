@@ -44,9 +44,16 @@ SOC="ascend910_93"
 # 自定义算子包 vendor 名称 (编译参数 --vendor_name 使用, CMake 会追加 _transformer 后缀)
 VENDOR_NAME="custom"
 
-JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 32)"
-if [[ "${JOBS}" -lt 32 ]]; then
-    JOBS=32
+# 默认并发数取总核数的 1/4。
+# 用 getconf / nproc --all 获取物理核数, 避免 OMP_NUM_THREADS 等环境变量
+# 改变 nproc 的返回值而导致并发数被压低。
+TOTAL_CPUS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+if ! [[ "${TOTAL_CPUS}" =~ ^[0-9]+$ ]] || [[ "${TOTAL_CPUS}" -le 0 ]]; then
+    TOTAL_CPUS="$(nproc --all 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+fi
+JOBS=$(( TOTAL_CPUS / 4 ))
+if [[ "${JOBS}" -lt 1 ]]; then
+    JOBS=1
 fi
 
 # 编译优化级别 (默认 O3)
